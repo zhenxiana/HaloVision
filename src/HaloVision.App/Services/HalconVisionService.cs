@@ -12,7 +12,7 @@ public class HalconVisionService : IVisionService
             using var image = new HImage(imagePath);
             using var gray = image.Rgb1ToGray();
 
-            HOperatorSet.GaussFilter(gray, out HObject gauss, 3, 3);
+            HOperatorSet.MeanImage(gray, out HObject gauss, 3, 3);
             HOperatorSet.Threshold(gauss, out HObject region, new HTuple(100), new HTuple(255));
             HOperatorSet.OpeningCircle(region, out HObject opening, 3.5);
 
