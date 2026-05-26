@@ -36,4 +36,9 @@
     <Error Condition="!Exists('$(HalconRoot)\bin\dotnet48\halcondotnet.dll') and !Exists('$(HalconRoot)\bin\dotnet35\halcondotnet.dll')"
            Text="未找到 halcondotnet.dll。请设置环境变量 HALCONROOT 或 MSBuild 属性 HalconRoot，并确认 $(HalconRoot)\bin\dotnet48 或 dotnet35 下存在 halcondotnet.dll。" />
   </Target>
+  <ItemGroup>
+    <None Update="Configs\calibration.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>
