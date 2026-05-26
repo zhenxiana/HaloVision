@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <PlatformTarget>x64</PlatformTarget>
+    <HalconRoot Condition="'$(HalconRoot)' == '' and '$(HALCONROOT)' != ''">$(HALCONROOT)</HalconRoot>
+    <HalconRoot Condition="'$(HalconRoot)' == ''">C:\Program Files\MVTec\HALCON-20.11-Progress</HalconRoot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,10 +18,22 @@
     <PackageReference Include="System.Drawing.Common" Version="6.0.0" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="Exists('$(HalconRoot)\bin\dotnet48\halcondotnet.dll')">
     <Reference Include="halcondotnet">
-      <HintPath>$(HALCONROOT)\bin\dotnet48\halcondotnet.dll</HintPath>
+      <HintPath>$(HalconRoot)\bin\dotnet48\halcondotnet.dll</HintPath>
       <Private>true</Private>
     </Reference>
   </ItemGroup>
+
+  <ItemGroup Condition="!Exists('$(HalconRoot)\bin\dotnet48\halcondotnet.dll') and Exists('$(HalconRoot)\bin\dotnet35\halcondotnet.dll')">
+    <Reference Include="halcondotnet">
+      <HintPath>$(HalconRoot)\bin\dotnet35\halcondotnet.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="CheckHalconDotNetReference" BeforeTargets="ResolveReferences">
+    <Error Condition="!Exists('$(HalconRoot)\bin\dotnet48\halcondotnet.dll') and !Exists('$(HalconRoot)\bin\dotnet35\halcondotnet.dll')"
+           Text="未找到 halcondotnet.dll。请设置环境变量 HALCONROOT 或 MSBuild 属性 HalconRoot，并确认 $(HalconRoot)\bin\dotnet48 或 dotnet35 下存在 halcondotnet.dll。" />
+  </Target>
 </Project>
