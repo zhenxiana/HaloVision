@@ -1,70 +1,76 @@
-using System.Windows.Input;
-using HaloVision.App.Services;
+using System.IO;
+using System.Windows;
+using System.Windows.Media;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using HaloVision.App.Models;
+using HaloVision.App.Services.HalconService;
+using HaloVision.App.Utils;
 using Microsoft.Win32;
 
 namespace HaloVision.App.ViewModels;
 
-public class MainViewModel : ViewModelBase
+public partial class MainViewModel : ObservableObject
 {
-    private readonly IVisionService _visionService;
-    private string _imagePath = string.Empty;
-    private string _status = "等待检测";
-    private double _score;
+    private readonly IHalconService _halconService;
+    private readonly CalibrationData _calibrationData;
 
-    public MainViewModel() : this(new HalconVisionService())
+    [ObservableProperty] private string imagePath = string.Empty;
+    [ObservableProperty] private string status = "等待检测";
+    [ObservableProperty] private double score;
+    [ObservableProperty] private ImageSource? imageSource;
+    [ObservableProperty] private DetectResult currentResult = new();
+
+    public MainViewModel() : this(new HalconService())
     {
     }
 
-    public MainViewModel(IVisionService visionService)
+    public MainViewModel(IHalconService halconService)
     {
-        _visionService = visionService;
-        SelectImageCommand = new RelayCommand(SelectImage);
-        InspectCommand = new RelayCommand(Inspect, () => !string.IsNullOrWhiteSpace(ImagePath));
+        _halconService = halconService;
+        _calibrationData = ConfigService.LoadCalibrationData();
     }
 
-    public string ImagePath
-    {
-        get => _imagePath;
-        set
-        {
-            SetProperty(ref _imagePath, value);
-            (InspectCommand as RelayCommand)?.RaiseCanExecuteChanged();
-        }
-    }
-
-    public string Status
-    {
-        get => _status;
-        private set => SetProperty(ref _status, value);
-    }
-
-    public double Score
-    {
-        get => _score;
-        private set => SetProperty(ref _score, value);
-    }
-
-    public ICommand SelectImageCommand { get; }
-    public ICommand InspectCommand { get; }
-
+    [RelayCommand]
     private void SelectImage()
     {
-        var dialog = new OpenFileDialog
-        {
-            Filter = "Image Files|*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff"
-        };
+        var dialog = new OpenFileDialog { Filter = "Image Files|*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff" };
+        if (dialog.ShowDialog() != true) return;
 
-        if (dialog.ShowDialog() == true)
+        ImagePath = dialog.FileName;
+        _halconService.LoadImage(ImagePath);
+        using var img = _halconService.GetCurrentImage();
+        ImageSource = ImageConverter.HObjectToBitmapSource(img);
+        Status = "已选择图像，点击检测";
+        InspectCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanInspect))]
+    private async Task Inspect()
+    {
+        try
         {
-            ImagePath = dialog.FileName;
-            Status = "已选择图像，点击检测";
+            CurrentResult = await Task.Run(() => _halconService.MeasureSize(_calibrationData));
+            Score = CurrentResult.IsPass ? 1.0 : 0.0;
+            Status = CurrentResult.IsPass ? "OK | 检测完成" : $"NG | {CurrentResult.ErrorMsg}";
+            SaveDetectResult(CurrentResult);
+        }
+        catch (Exception ex)
+        {
+            Status = $"检测异常: {ex.Message}";
+            Logger.Error(Status, ex);
+            MessageBox.Show(Status, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
-    private void Inspect()
+    private bool CanInspect() => !string.IsNullOrWhiteSpace(ImagePath);
+
+    partial void OnImagePathChanged(string value) => InspectCommand.NotifyCanExecuteChanged();
+
+    private static void SaveDetectResult(DetectResult result)
     {
-        var result = _visionService.RunEdgeInspection(ImagePath);
-        Score = result.Score;
-        Status = $"{(result.IsOk ? "OK" : "NG")} | {result.Message}";
+        Directory.CreateDirectory("Logs");
+        var line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss},{result.IsPass},{result.Width:F2},{result.Height:F2},{result.ProcessTime.TotalMilliseconds:F0}";
+        File.AppendAllText("Logs/detect_log.csv", line + Environment.NewLine);
     }
 }
